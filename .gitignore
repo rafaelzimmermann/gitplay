@@ -4,3 +4,10 @@ Cargo.lock
 .DS_Store
 *.swp
 *.tmp
+
+
+# Added by cargo
+#
+# already existing elements were commented out
+
+#/target
