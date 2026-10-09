@@ -2,8 +2,14 @@
 name = "gitplay"
 version = "0.1.0"
 edition = "2021"
-description = "Live rolling git diff visualizer"
+description = "A live, rolling code-movement and diff visualizer for git repositories"
 license = "MIT"
+authors = ["Rafael Zimmermann <rafaelzimmermann@users.noreply.github.com>"]
+readme = "README.md"
+repository = "https://github.com/rafaelzimmermann/gitplay"
+homepage = "https://github.com/rafaelzimmermann/gitplay"
+keywords = ["git", "diff", "visualizer", "stream", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }

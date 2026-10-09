@@ -181,7 +181,7 @@ INSTALL_DIR=/usr/local/bin ./install.sh
 
 ## 7. Engineering Constraints & Invariants
 
-1. **Local LLM Development Rule**: All production code edits must be executed by `pi` (using Z.AI `glm-5.2` or designated model). The Dev Manager specifies design, plans, reviews output, and maintains documentation.
+1. **Local Development Rule**: All production code edits must go through a reviewed local development workflow. Design, planning, review, and documentation are maintained alongside the code.
 2. **Deterministic Tests**: All core logic (diffing, snapshot tracking, formatting, filtering) must be covered by fast, deterministic unit tests running in `< 0.1s`.
 3. **Strict Quality Bar**: `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check` must pass on every commit.
 4. **Zero Overhead Idle**: When no files are changing, `gitplay` must sleep in `inotify` wait with 0.0% CPU usage.

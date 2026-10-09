@@ -1,13 +1,16 @@
+# Build artifacts
 /target
 **/*.rs.bk
-Cargo.lock
+
+# OS cruft
 .DS_Store
+Thumbs.db
+
+# Editor / IDE
 *.swp
+*.swo
+*~
 *.tmp
-
-
-# Added by cargo
-#
-# already existing elements were commented out
-
-#/target
+*.log
+.idea/
+.vscode/
