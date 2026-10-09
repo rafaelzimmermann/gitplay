@@ -1,0 +1,143 @@
+# gitplay — Live Rolling Code Movement Visualizer
+
+## 1. Product Vision & Problem Statement
+
+When AI coding agents (or developers in fast iterative loops) modify a codebase, the human operator is often left in the dark about what is happening in real time. Standard terminal tools offer two suboptimal extremes:
+1. **Static manual checks (`git diff`, `git status`)**: Require manual execution, interrupting workflow and showing a wall of text with no sense of temporal progression.
+2. **Terminal logs / tool calls**: Show raw text or verbose tool payloads that lack visual diff syntax, line context, or clear file-level structure.
+
+`gitplay` is a lightweight, zero-latency terminal tool written in Rust. You launch it in any git repository:
+
+```bash
+$ gitplay
+```
+
+It monitors working tree changes in real time and streams an animated, rolling diff feed—showing code additions, modifications, and deletions as they happen. It turns silent agent file modifications into a transparent, visual "theater" of code movement.
+
+---
+
+## 2. Key User Experiences (UX)
+
+### 2.1 The Rolling Diff Stream (Default Mode)
+- **Zero-configuration**: Automatically discovers git repository root and starts watching.
+- **Rolling Feed**: Whenever a file is written or touched, `gitplay` renders a clear file banner followed by formatted diff hunks:
+  - Additions rendered in bright green (`+`) with highlighted inline edits.
+  - Deletions rendered in red (`-`).
+  - Context lines dimmed for readability.
+- **Paced Code Movement**: Rather than dumping 2,000 lines in 1ms, `gitplay` offers a configurable rolling pace (`--speed` or `--pace-ms`), allowing the human eye to perceive the trajectory of code as an agent crafts it.
+- **Delta vs. Baseline Awareness**:
+  - **Delta mode (`--delta`, default)**: Shows what was modified in the *latest write event* compared to the previous tick.
+  - **Cumulative mode (`--cumulative`)**: Shows the total diff of the working tree relative to `git HEAD`.
+  - Both modes can be toggled interactively or via CLI flags.
+
+### 2.2 Replay Mode (`gitplay play [commit..commit]`)
+- Allows replaying the diff progression of recent commits or git stash history at human-readable speeds.
+
+### 2.3 Noise Suppression & Gitignore Compliance
+- Fully respects `.gitignore`, `.git/info/exclude`, and global gitignores.
+- Automatically ignores build artifacts (`target/`, `node_modules/`, `*.lock`, binary files).
+- Configurable debounce window (default 150ms) to consolidate multi-pass atomic writes.
+
+---
+
+## 3. CLI Interface & Flags
+
+```bash
+USAGE:
+    gitplay [OPTIONS] [PATH]
+
+ARGS:
+    <PATH>                   Repository path to monitor [default: .]
+
+OPTIONS:
+    -m, --mode <MODE>        Display mode: 'stream' (default) or 'tui' [default: stream]
+    -d, --delta              Show incremental changes since last tick [default: true]
+    -c, --cumulative         Show cumulative diffs against git HEAD
+    -p, --pace <MS>          Delay in milliseconds per line/hunk for rolling effect [default: 15]
+    -w, --debounce <MS>      Debounce window in milliseconds [default: 150]
+    -u, --untracked          Include untracked files [default: true]
+    -U, --context <N>        Number of context lines to display [default: 3]
+        --no-color           Disable ANSI color styling
+    -v, --verbose            Show verbose debug logs
+    -h, --help               Print help information
+    -V, --version            Print version information
+```
+
+---
+
+## 4. Technical Architecture
+
+### 4.1 System Modules
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       gitplay CLI                           │
+└──────────────┬───────────────────────────────┬──────────────┘
+               │                               │
+       ┌───────▼────────┐             ┌────────▼────────┐
+       │ File Watcher   │             │ Git Repository  │
+       │ (notify crate) │             │ (HEAD & Index)  │
+       └───────┬────────┘             └────────┬────────┘
+               │ FileChangeEvents              │ Snapshots
+               └───────────────┬───────────────┘
+                               │
+                       ┌───────▼────────┐
+                       │  Diff Engine   │
+                       │ (similar crate)│
+                       └───────┬────────┘
+                               │ Hunks & Stats
+               ┌───────────────┴───────────────┐
+               │                               │
+       ┌───────▼────────┐             ┌────────▼────────┐
+       │ Rolling Stream │             │  Ratatui TUI    │
+       │   Presenter    │             │   Dashboard     │
+       └────────────────┘             └─────────────────┘
+```
+
+1. **`cli`**: Argument parsing via `clap` (derive mode), terminal detection, color configuration.
+2. **`repo`**: Git repository discovery, workdir discovery, HEAD commit inspection, `.gitignore` parsing via `ignore` crate.
+3. **`watcher`**: Cross-platform filesystem event monitoring (`notify` + `notify-debouncer-mini`), debounced channel sender, ignore-list filtering.
+4. **`diff`**: In-memory text diffing using the `similar` crate (Myers algorithm). Manages file snapshots:
+   - `last_snapshot`: file state at tick $T_{n-1}$ (for delta calculation).
+   - `head_snapshot`: file state at git `HEAD` (for cumulative calculation).
+   - Produces formatted `DiffHunk` structures with line numbers and token spans.
+5. **`presenter`**:
+   - `stream`: Terminal streaming engine using `crossterm`. Formats banners, stats, and colorized diff lines. Implements smooth pacing timer.
+   - `stats`: Live counter of files touched, lines added (`+`), and lines removed (`-`).
+
+---
+
+## 5. Delivery Milestones
+
+### Phase M0 — Foundations & Core Diff Engine
+- [ ] Initialize Cargo workspace and crate structure.
+- [ ] Add dependencies (`clap`, `similar`, `notify`, `notify-debouncer-mini`, `ignore`, `crossterm`).
+- [ ] Implement `diff` engine: compute unified diffs from two in-memory string slices with line numbering.
+- [ ] Comprehensive unit tests for diff formatting, added files, removed files, modified lines.
+
+### Phase M1 — Watcher & Git State Tracking
+- [ ] Implement git repo root discovery and branch/HEAD tracking.
+- [ ] Integrate `.gitignore` filtering using `ignore` crate.
+- [ ] Set up debounced file watcher listening on working tree.
+- [ ] Cache file states in memory; compute delta diffs upon modification.
+
+### Phase M2 — Rolling Stream Engine & Pacing
+- [ ] Terminal banner formatting: timestamp, file path, `+additions / -deletions`.
+- [ ] Colorized unified diff output with configurable context lines.
+- [ ] Configurable rolling pacing loop (`--pace <ms>`).
+- [ ] Signal handling (graceful Ctrl+C exit without terminal corruption).
+
+### Phase M3 — Verification & Polish
+- [ ] Synthetic end-to-end test verifying multi-file write stream.
+- [ ] Strict Clippy audit (`--deny warnings`).
+- [ ] Zero-latency deterministic unit tests passing in `< 0.05s`.
+- [ ] Release binary packaging and installation to `~/.local/bin/gitplay`.
+
+---
+
+## 6. Engineering Constraints & Invariants
+
+1. **Local LLM Development Rule**: All production code edits must be executed by `pi` (`--provider strata --model qwen3.8-flash-next-coder-iq1_m`). The Dev Manager specifies design, plans, and reviews output.
+2. **Deterministic Tests**: All core logic (diffing, snapshot tracking, formatting, filtering) must be covered by fast, deterministic unit tests running in `< 0.1s`.
+3. **Strict Quality Bar**: `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check` must pass on every commit.
+4. **Zero Overhead Idle**: When no files are changing, `gitplay` must sleep in `inotify` wait with 0.0% CPU usage.
