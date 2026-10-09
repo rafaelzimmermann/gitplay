@@ -134,7 +134,7 @@ OPTIONS:
 - [x] Zero-latency deterministic unit tests passing in `< 0.05s`.
 - [ ] Relative repo-root path formatting in output banners.
 - [ ] Git HEAD baseline tracking for `--cumulative` and `--once` modes.
-- [ ] Automated installation script (`install.sh`) supporting local build and PATH detection.
+- [x] Automated installation script (`install.sh`) supporting local build and PATH detection.
 - [ ] Shell completion and PATH discovery verification.
 
 ---
