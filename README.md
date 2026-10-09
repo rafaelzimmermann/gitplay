@@ -27,7 +27,7 @@ instead of arriving as an instant, unreadable blob.
 
 ```
 $ gitplay
-[gitplay] Watching /code/myproject (pace: 15ms, debounce: 150ms)
+[gitplay] Watching /code/myproject (pace: 15ms, debounce: 150ms) — press 'q' to quit
 
 ────────────────────────────────────────────────────────────────
  14:32:05  src/main.rs                      +12 / −3
@@ -45,6 +45,9 @@ $ gitplay
 
 - **Continuous live stream** — catches file writes, moves, and modifications
   the moment they hit disk.
+- **Interactive exit** — press `q` (or `Esc` / `Ctrl+C`) to quit the watcher
+  cleanly; raw mode is enabled only when stdin is a TTY and is always
+  restored via an RAII guard, so piped and CI runs are unaffected.
 - **Rolling visual pace** — instead of dumping diffs instantly, lines roll
   smoothly into view at a configurable pace, making code movement perceptible.
 - **Delta & cumulative diffs** — see what changed in the latest write tick, or
@@ -90,7 +93,7 @@ install -m 755 target/release/gitplay ~/.local/bin/gitplay
 ## Usage
 
 ```bash
-gitplay                          # watch the current repository
+gitplay                          # watch the current repository (press 'q' to quit)
 gitplay ~/code/myproject         # watch a specific repository
 gitplay --pace 40 --cumulative   # slower roll, diff against baseline
 ```

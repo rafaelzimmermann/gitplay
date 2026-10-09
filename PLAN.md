@@ -25,6 +25,7 @@ It monitors working tree changes in real time and streams an animated, rolling d
   - Deletions rendered in red (`-`).
   - Context lines dimmed for readability.
 - **Paced Code Movement**: Rather than dumping 2,000 lines in 1ms, `gitplay` offers a configurable rolling pace (`--pace`, default 15ms), allowing the human eye to perceive the trajectory of code as an agent crafts it.
+- **Interactive Exit**: Pressing `q` (or `Esc` / `Ctrl+C`) stops the watcher cleanly; terminal raw mode is guarded by RAII and restored on exit, return, or panic.
 - **Delta vs. Baseline Awareness**:
   - **Delta mode (`--delta`, default)**: Shows what was modified in the *latest write event* compared to the previous tick.
   - **Cumulative mode (`--cumulative`)**: Shows the total diff of the working tree relative to `git HEAD`.
@@ -127,6 +128,7 @@ OPTIONS:
 - [x] Colorized unified diff output with configurable context lines.
 - [x] Configurable rolling pacing loop (`--pace <ms>`).
 - [x] Signal handling (graceful Ctrl+C exit without terminal corruption).
+- [x] Interactive quit: pressing 'q' (or Esc / Ctrl+C) exits via a raw-mode keyboard listener; stdin TTY detection, RAII raw-mode guard, and panic-hook terminal restoration.
 
 ### Phase M3 — Verification, Packaging & Installation (In Progress)
 - [x] Synthetic end-to-end test verifying multi-file write stream.

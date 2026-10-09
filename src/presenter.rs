@@ -3,8 +3,28 @@ use crossterm::style::{Color, Stylize};
 use crossterm::tty::IsTty;
 use std::io::Write;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// Whether the terminal is currently in raw mode (set by the watcher).
+/// While set, the terminal no longer translates a bare `\n` into a
+/// carriage return and line feed, so line endings must be written as
+/// `\r\n` to keep output from staircasing.
+static RAW_OUTPUT: AtomicBool = AtomicBool::new(false);
+
+/// Records whether raw mode is active on the terminal (see `watcher`).
+pub fn set_raw_output(enabled: bool) {
+    RAW_OUTPUT.store(enabled, Ordering::Relaxed);
+}
+
+fn line_ending() -> &'static str {
+    if RAW_OUTPUT.load(Ordering::Relaxed) {
+        "\r\n"
+    } else {
+        "\n"
+    }
+}
 
 /// Formats `[HH:MM:SS]` from the system clock.
 fn timestamp() -> String {
@@ -38,6 +58,7 @@ pub fn print_diff(
     };
 
     let mut out = std::io::stdout().lock();
+    let eol = line_ending();
     let banner = format!(
         "{} {} (+{}, -{})",
         timestamp(),
@@ -46,17 +67,17 @@ pub fn print_diff(
         stats.deletions
     );
     let _ = if no_color {
-        writeln!(out, "{banner}")
+        write!(out, "{banner}{eol}")
     } else {
-        writeln!(out, "{}", banner.bold())
+        write!(out, "{}{eol}", banner.bold())
     };
 
     for hunk in hunks {
         let header = format!("@@ -{} +{} @@", hunk.old_start, hunk.new_start);
         let _ = if no_color {
-            writeln!(out, "{header}")
+            write!(out, "{header}{eol}")
         } else {
-            writeln!(out, "{}", header.with(Color::Cyan))
+            write!(out, "{}{eol}", header.with(Color::Cyan))
         };
         paced(&mut out, pacing);
 
@@ -64,23 +85,23 @@ pub fn print_diff(
             match line {
                 DiffLine::Add(text) => {
                     let _ = if no_color {
-                        writeln!(out, "+ {text}")
+                        write!(out, "+ {text}{eol}")
                     } else {
-                        writeln!(out, "{}", format!("+ {text}").with(Color::Green))
+                        write!(out, "{}{eol}", format!("+ {text}").with(Color::Green))
                     };
                 }
                 DiffLine::Remove(text) => {
                     let _ = if no_color {
-                        writeln!(out, "- {text}")
+                        write!(out, "- {text}{eol}")
                     } else {
-                        writeln!(out, "{}", format!("- {text}").with(Color::Red))
+                        write!(out, "{}{eol}", format!("- {text}").with(Color::Red))
                     };
                 }
                 DiffLine::Context(text) => {
                     let _ = if no_color {
-                        writeln!(out, "  {text}")
+                        write!(out, "  {text}{eol}")
                     } else {
-                        writeln!(out, "{}", format!("  {text}").dim())
+                        write!(out, "{}{eol}", format!("  {text}").dim())
                     };
                 }
             }
@@ -112,6 +133,14 @@ mod tests {
             assert_eq!(part.len(), 2, "each component is zero-padded");
             assert!(part.chars().all(|c| c.is_ascii_digit()));
         }
+    }
+
+    #[test]
+    fn line_ending_tracks_raw_mode() {
+        set_raw_output(true);
+        assert_eq!(line_ending(), "\r\n");
+        set_raw_output(false);
+        assert_eq!(line_ending(), "\n");
     }
 
     #[test]

@@ -27,7 +27,7 @@ fn main() {
     }
 
     println!(
-        "[gitplay] Watching {} (pace: {}ms, debounce: {}ms)",
+        "[gitplay] Watching {} (pace: {}ms, debounce: {}ms) — press 'q' to quit",
         root.display(),
         cli.pace,
         cli.debounce
