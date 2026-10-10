@@ -1,128 +1,100 @@
 # gitplay
 
-> 🎬 A live, rolling code-movement and diff visualizer for git repositories.
+Watch code changes appear as a live, rolling diff in your terminal.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Crates.io](https://img.shields.io/badge/crates.io-gitplay-orange.svg)](https://crates.io/crates/gitplay)
-
-`gitplay` watches your working tree in real time and streams an animated,
-rolling diff feed — letting you *watch* code changes, refactors, and AI coding
-agents as they craft code.
-
-## Why gitplay?
-
-When an AI coding agent (or a developer in a fast iterative loop) modifies a
-codebase, the human operator is usually left in the dark about what is
-happening in real time. Existing tools sit at two suboptimal extremes:
-
-- **Static checks** (`git diff`, `git status`) must be run manually and dump a
-  wall of text with no sense of temporal progression.
-- **Terminal logs / tool-call traces** show raw payloads without diff syntax,
-  line context, or file-level structure.
-
-`gitplay` turns silent file modifications into a transparent, visual **theater
-of code movement**: every write event is rendered as a paced, colorized,
-rolling diff — so the trajectory of the code is visible to the human eye
-instead of arriving as an instant, unreadable blob.
-
-```
-$ gitplay
-[gitplay] Watching /code/myproject (pace: 15ms, debounce: 150ms) — press 'q' to quit
-
-────────────────────────────────────────────────────────────────
- 14:32:05  src/main.rs                      +12 / −3
-────────────────────────────────────────────────────────────────
-@@ -41,6 +41,9 @@
-     let root = find_git_root(&cli.path);
-     let matcher = GitignoreMatcher::new(&root);
-+    let mut snapshots = SnapshotStore::new();
-+
-+    scan_tree(&root, &root, &cli, &mut snapshots, &matcher, false);
-     if cli.once {
-```
+`gitplay` monitors a repository's working tree and prints text file changes as
+they happen. It is useful when you want to follow an active editing session,
+including changes made by an AI coding agent, without repeatedly running
+`git diff`.
 
 ## Features
 
-- **Continuous live stream** — catches file writes, moves, and modifications
-  the moment they hit disk.
-- **Interactive exit** — press `q` (or `Esc` / `Ctrl+C`) to quit the watcher
-  cleanly; raw mode is enabled only when stdin is a TTY and is always
-  restored via an RAII guard, so piped and CI runs are unaffected.
-- **Rolling visual pace** — instead of dumping diffs instantly, lines roll
-  smoothly into view at a configurable pace, making code movement perceptible.
-- **Delta & cumulative diffs** — see what changed in the latest write tick, or
-  the total diff against the baseline.
-- **Gitignore respecting** — skips noise (`target/`, `node_modules/`, binary
-  files) via the `ignore` crate.
-- **Zero-CPU idle** — sleeps in native inotify waits when nothing changes.
+- Streams additions, deletions, and context as files change.
+- Shows either each change since the last update or changes since startup.
+- Respects repository `.gitignore` rules and `.git/info/exclude`.
+- Skips hidden files, Git internals, editor temporary files, and files that
+  cannot be read as UTF-8.
+- Lets you adjust the display pace, debounce window, and diff context.
+- Press `q`, `Esc`, or `Ctrl+C` in an interactive terminal to exit.
 
-## Installation
+## Install
 
-### Quick install (recommended)
+### Build and install from a checkout
 
-From a repository checkout:
+Requires the Rust toolchain (`cargo` and `rustc`):
 
-```bash
+```sh
+git clone https://github.com/rafaelzimmermann/gitplay.git
+cd gitplay
 ./install.sh
 ```
 
-The script builds `gitplay` in release mode and installs it into a directory
-on your `PATH`, auto-detecting the best target (`~/.cargo/bin`,
-`~/.local/bin`, or `/usr/local/bin`). No root required.
+The installer builds a release binary and chooses an install directory from
+your `PATH`. To choose a directory explicitly:
 
-```bash
-./install.sh --dir /usr/local/bin   # custom destination
-./install.sh --uninstall            # clean removal
+```sh
+./install.sh --dir "$HOME/.local/bin"
 ```
 
-### With cargo
+To remove the installed binary:
 
-```bash
-cargo install --git https://github.com/rafaelzimmermann/gitplay
+```sh
+./install.sh --uninstall
 ```
 
-### From source
+You can also build without installing:
 
-```bash
-git clone https://github.com/rafaelzimmermann/gitplay
-cd gitplay
+```sh
 cargo build --release --locked
-install -m 755 target/release/gitplay ~/.local/bin/gitplay
 ```
 
-## Usage
+## Use
 
-```bash
-gitplay                          # watch the current repository (press 'q' to quit)
-gitplay ~/code/myproject         # watch a specific repository
-gitplay --pace 40 --cumulative   # slower roll, diff against baseline
+Run `gitplay` from inside a Git repository, or pass a path to one:
+
+```sh
+gitplay
+gitplay ~/code/my-project
 ```
 
-### CLI options
+### Options
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `<PATH>` | `.` | Path to the repository to watch. |
-| `-p, --pace <MS>` | `15` | Rolling line delay in milliseconds. Lower is faster. |
-| `-c, --cumulative` | off | Show cumulative diffs against the initial baseline instead of per-tick deltas. |
-| `-w, --debounce <MS>` | `150` | Debounce window in milliseconds to consolidate multi-pass atomic writes. |
-| `-U, --context <N>` | `3` | Number of context lines shown around diff hunks. |
+| `[PATH]` | `.` | Repository path to watch. The nearest parent containing `.git` is used. |
+| `-p, --pace <MS>` | `15` | Delay between displayed diff lines in a terminal. Set to `0` for no delay. |
+| `-w, --debounce <MS>` | `150` | Time window for grouping filesystem events. |
+| `-U, --context <N>` | `3` | Number of unchanged lines shown around changes. |
+| `-c, --cumulative` | off | Compare each update with the working tree as it was when `gitplay` started. |
 | `--no-color` | off | Disable ANSI color styling. |
-| `--once` | off | Scan the working tree once, print diffs, and exit. |
+| `--once` | off | Scan once and exit. This reports changes detected between the initial and follow-up scans. |
 
-Run `gitplay --help` for the full CLI reference.
+Run `gitplay --help` for the complete command reference.
+
+## Notes
+
+`gitplay` reads files in the selected working tree to display their diffs.
+Diff contents are written to the terminal; the program does not send them to
+an external service. Avoid running it in a terminal whose output is being
+recorded if the repository contains sensitive code or data.
+
+The cumulative view uses the working tree snapshot captured at startup as its
+baseline. It does not compare against Git `HEAD`.
 
 ## Contributing
 
-Contributions are welcome! To get started:
+Bug reports and pull requests are welcome. Please include a clear description
+of the change and run the Rust formatting, test, and lint checks before
+submitting:
 
-1. Fork the repository and create your branch from `main`.
-2. Make your changes — see [PLAN.md](PLAN.md) for the architecture and design
-   overview.
-3. Ensure the quality bar passes: `cargo fmt --check`, `cargo test --locked`,
-   and `cargo clippy --all-targets -- -D warnings`.
-4. Open a pull request with a clear description of the change.
+```sh
+cargo fmt --check
+cargo test --locked
+cargo clippy --all-targets -- -D warnings
+```
+
+See [PLAN.md](PLAN.md) for the project's design notes and roadmap.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+Licensed under the [MIT License](LICENSE).
