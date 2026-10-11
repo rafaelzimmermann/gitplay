@@ -6,8 +6,8 @@ mod presenter;
 mod repo;
 mod watcher;
 
-use clap::Parser;
-use cli::Cli;
+use clap::{CommandFactory, Parser};
+use cli::{Cli, Commands};
 use commits::{git_available, CommitTracker, HeadBaseline};
 use diff::SnapshotStore;
 use repo::{find_git_root, GitignoreMatcher};
@@ -15,6 +15,21 @@ use std::path::Path;
 
 fn main() {
     let cli = Cli::parse();
+    // `completions` only prints a script: no repository, watcher, or git
+    // interaction should stand between the user and their shell setup.
+    if let Some(Commands::Completions { shell }) = &cli.command {
+        let mut command = Cli::command();
+        let name = command.get_name().to_string();
+        // Buffering lets a broken pipe (e.g. `| head`) end quietly instead
+        // of panicking inside the generator.
+        let mut buffer = Vec::new();
+        clap_complete::generate(*shell, &mut command, name, &mut buffer);
+        use std::io::Write;
+        let mut out = std::io::stdout().lock();
+        let _ = out.write_all(&buffer);
+        let _ = out.flush();
+        return;
+    }
     let root = find_git_root(&cli.path);
     let matcher = GitignoreMatcher::new(&root);
     let mut snapshots = SnapshotStore::new();

@@ -152,7 +152,7 @@ OPTIONS:
 - [x] Automated installation script (`install.sh`) supporting local build and PATH detection.
 - [x] Installer verification: build, PATH-aware `--dir` install, and
       `--version`/`--once` smoke test against the installed release binary.
-- [ ] Shell completion generation.
+- [x] Shell completion generation.
 
 ---
 

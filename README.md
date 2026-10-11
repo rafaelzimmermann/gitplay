@@ -87,6 +87,7 @@ with their messages, and a footer repeats the path and branch):
 | `-c, --cumulative` | off | Compare each update with its committed content in git `HEAD`, like `git diff`. |
 | `--no-color` | off | Disable ANSI color styling. |
 | `--once` | off | Print the current uncommitted diff against git `HEAD` once and exit. |
+| `completions <SHELL>` | — | Print a completion script for `bash`, `zsh`, `fish`, `elvish`, or `powershell`. |
 
 Run `gitplay --help` for the complete command reference.
 
@@ -113,6 +114,12 @@ Commit reporting watches the `HEAD` file in the git directory and runs
 Checkouts and detachments get a one-line note (`switched to branch …`,
 `detached HEAD at …`), while resets on the same branch stay silent. Linked
 worktrees and packed refs are resolved without spawning `git`.
+
+Shell completions are one command away, for example:
+
+    gitplay completions bash > ~/.local/share/bash-completion/completions/gitplay
+    gitplay completions zsh  > ~/.zfunc/_gitplay        # ensure ~/.zfunc is in fpath
+    gitplay completions fish > ~/.config/fish/completions/gitplay.fish
 
 ## Contributing
 
