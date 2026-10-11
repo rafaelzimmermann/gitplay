@@ -1,4 +1,5 @@
 use crate::cli::Cli;
+use crate::commits::CommitTracker;
 use crate::diff::SnapshotStore;
 use crate::presenter;
 use crate::repo::GitignoreMatcher;
@@ -115,13 +116,15 @@ fn is_quit_event(event: &Event) -> bool {
 
 /// Runs the debounced filesystem watcher loop until the process is stopped.
 /// On every event, changed files are diffed against their snapshots and any
-/// resulting diff is streamed to the terminal. In interactive sessions the
+/// resulting diff is streamed to the terminal. HEAD moves (commits, merges,
+/// branch switches) are reported alongside them. In interactive sessions the
 /// user can press 'q' (or Esc / Ctrl+C) to stop cleanly.
 pub fn run_watcher(
     root: PathBuf,
     cli: Cli,
     mut snapshots: SnapshotStore,
     matcher: GitignoreMatcher,
+    mut tracker: CommitTracker,
 ) {
     let (tx, rx) = mpsc::channel::<DebounceEventResult>();
 
@@ -155,8 +158,21 @@ pub fn run_watcher(
         };
         match received {
             Ok(Ok(events)) => {
+                let mut printed = false;
                 for event in events {
-                    handle_event(&root, &event.path, &cli, &mut snapshots, &matcher);
+                    if handle_event(&root, &event.path, &cli, &mut snapshots, &matcher) {
+                        printed = true;
+                    }
+                }
+                // HEAD moves are written under `.git`, which the diff stream
+                // ignores entirely; checking after each batch catches a commit
+                // (or branch switch) without spending any time idle.
+                if let Some(head_move) = tracker.check(&root) {
+                    presenter::print_head_move(&head_move, cli.no_color);
+                    printed = true;
+                }
+                if printed {
+                    presenter::print_footer(&root, tracker.branch(), cli.no_color);
                 }
             }
             Ok(Err(err)) => {
@@ -184,21 +200,23 @@ pub fn run_watcher(
     }
 }
 
+/// Applies one filesystem event: the file is re-read and diffed against its
+/// snapshot. Returns whether anything reached the terminal.
 fn handle_event(
     root: &Path,
     path: &Path,
     cli: &Cli,
     snapshots: &mut SnapshotStore,
     matcher: &GitignoreMatcher,
-) {
+) -> bool {
     let is_dir = path.is_dir();
     if matcher.is_ignored(root, path, is_dir) {
-        return;
+        return false;
     }
     if is_dir {
         // Directories themselves carry no diffable content; their children
         // arrive as separate events.
-        return;
+        return false;
     }
 
     // A vanished file is treated as emptied; files that exist but cannot be
@@ -206,7 +224,7 @@ fn handle_event(
     let content = if path.exists() {
         match std::fs::read_to_string(path) {
             Ok(content) => content,
-            Err(_) => return,
+            Err(_) => return false,
         }
     } else {
         String::new()
@@ -215,6 +233,9 @@ fn handle_event(
     if let Some((stats, hunks)) = snapshots.check_diff(path, &content, cli.context, cli.cumulative)
     {
         presenter::print_diff(path, &stats, &hunks, cli.pace, cli.no_color);
+        true
+    } else {
+        false
     }
 }
 

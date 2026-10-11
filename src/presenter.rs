@@ -1,5 +1,7 @@
+use crate::commits::HeadMove;
 use crate::diff::{DiffLine, DiffStats, FormattedHunk};
 use crossterm::style::{Color, Stylize};
+use crossterm::terminal::size;
 use crossterm::tty::IsTty;
 use std::io::Write;
 use std::path::Path;
@@ -118,6 +120,124 @@ fn paced(out: &mut std::io::StdoutLock<'_>, delay: Option<Duration>) {
     }
 }
 
+/// Trims a commit id to the first 7 characters, the usual display form.
+fn short_hash(hash: String) -> String {
+    hash.chars().take(7).collect()
+}
+
+/// One-line note for a HEAD move that brought no new commits, i.e. a plain
+/// checkout. `None` when there is nothing worth reporting (a reset or rewind
+/// on the same branch).
+fn switch_note(head_move: &HeadMove) -> Option<String> {
+    if !head_move.ref_changed {
+        return None;
+    }
+    Some(match &head_move.branch {
+        Some(name) => format!("switched to branch {name}"),
+        None => format!("detached HEAD at {}", short_hash(head_move.oid.clone())),
+    })
+}
+
+/// Prints the commits a single HEAD move brought in: one bold header line per
+/// commit (`[HH:MM:SS] commit <hash> (branch) "subject"`), followed by the
+/// message body dimmed and indented. Commits land in the order they happened.
+/// A checkout that adds no commits gets a single "switched to branch" note.
+pub fn print_head_move(head_move: &HeadMove, no_color: bool) {
+    if head_move.commits.is_empty() && !head_move.truncated {
+        let note = match switch_note(head_move) {
+            Some(note) => format!("{} {note}", timestamp()),
+            None => return,
+        };
+        let mut out = std::io::stdout().lock();
+        let eol = line_ending();
+        let _ = if no_color {
+            write!(out, "{note}{eol}")
+        } else {
+            write!(out, "{0}{eol}", note.bold())
+        };
+        let _ = out.flush();
+        return;
+    }
+    let mut out = std::io::stdout().lock();
+    let eol = line_ending();
+    let branch = match &head_move.branch {
+        Some(name) => format!(" ({name})"),
+        None => String::new(),
+    };
+    for commit in &head_move.commits {
+        let header = format!(
+            "{} commit {}{} \"{}\"",
+            timestamp(),
+            short_hash(commit.hash.clone()),
+            branch,
+            commit.subject,
+        );
+        let _ = if no_color {
+            write!(out, "{header}{eol}")
+        } else {
+            write!(out, "{}{eol}", header.bold())
+        };
+        for line in &commit.body {
+            let _ = if no_color {
+                write!(out, "  {line}{eol}")
+            } else {
+                write!(out, "{}{eol}", format!("  {line}").dim())
+            };
+        }
+    }
+    if head_move.truncated {
+        let note = format!("{} ... more commits not shown", timestamp());
+        let _ = if no_color {
+            write!(out, "{note}{eol}")
+        } else {
+            write!(out, "{}{eol}", note.dim())
+        };
+    }
+    let _ = out.flush();
+}
+
+/// Width of the terminal, or a sane fallback when stdout is not one (piped
+/// output, CI) so the footer rule still has a predictable length.
+fn footer_width() -> usize {
+    match size() {
+        Ok((width, _)) => usize::from(width),
+        Err(_) => 80,
+    }
+}
+
+/// Shortens a path with the home directory spelled as `~` so the footer stays
+/// readable: `/home/you/code/app` becomes `~/code/app`.
+fn home_short(path: &Path) -> String {
+    let display = path.display().to_string();
+    let home = std::env::var("HOME").unwrap_or_default();
+    if !home.is_empty() && display.starts_with(&home) {
+        let tail: &str = &display[home.len()..];
+        format!("~{tail}")
+    } else {
+        display
+    }
+}
+
+/// Prints the footer: a full-width rule followed by the watched repository
+/// path and the branch under HEAD. Redrawn after every update so the bottom
+/// of the stream always states where the watch is and which branch it is on.
+pub fn print_footer(root: &Path, branch: Option<String>, no_color: bool) {
+    let mut out = std::io::stdout().lock();
+    let eol = line_ending();
+    let rule = "─".repeat(footer_width());
+    let label = match branch {
+        Some(name) => format!(" ({name})"),
+        None => String::new(),
+    };
+    let status = format!("{0}{1}", home_short(root), label);
+    let _ = if no_color {
+        write!(out, "{rule}{eol}{status}{eol}")
+    } else {
+        write!(out, "{0}{1}{2}{3}", rule.dim(), eol, status.bold(), eol)
+    };
+    let _ = out.flush();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,5 +282,39 @@ mod tests {
             ],
         }];
         print_diff(path, &stats, &hunks, 0, true);
+    }
+
+    #[test]
+    fn switch_note_reports_checkouts_and_detached_heads() {
+        let switch = HeadMove {
+            commits: Vec::new(),
+            branch: Some("main".into()),
+            truncated: false,
+            oid: "0123456789abcdef".into(),
+            ref_changed: true,
+        };
+        assert_eq!(
+            switch_note(&switch),
+            Some("switched to branch main".to_string())
+        );
+        let detached = HeadMove {
+            commits: Vec::new(),
+            branch: None,
+            truncated: false,
+            oid: "0123456789abcdef".into(),
+            ref_changed: true,
+        };
+        assert_eq!(
+            switch_note(&detached),
+            Some("detached HEAD at 0123456".to_string())
+        );
+        let reset = HeadMove {
+            commits: Vec::new(),
+            branch: Some("main".into()),
+            truncated: false,
+            oid: "0123456789abcdef".into(),
+            ref_changed: false,
+        };
+        assert_eq!(switch_note(&reset), None);
     }
 }

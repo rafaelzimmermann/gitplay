@@ -1,4 +1,5 @@
 mod cli;
+mod commits;
 mod diff;
 mod presenter;
 mod repo;
@@ -6,6 +7,7 @@ mod watcher;
 
 use clap::Parser;
 use cli::Cli;
+use commits::{git_available, CommitTracker};
 use diff::SnapshotStore;
 use repo::{find_git_root, GitignoreMatcher};
 use std::path::Path;
@@ -15,6 +17,11 @@ fn main() {
     let root = find_git_root(&cli.path);
     let matcher = GitignoreMatcher::new(&root);
     let mut snapshots = SnapshotStore::new();
+    // HEAD is tracked so commits made while watching appear in the stream.
+    let mut tracker = CommitTracker::new(&root);
+    if !git_available() {
+        println!("[gitplay] git binary not found: commit messages will be skipped");
+    }
 
     // Seed the snapshot store from the current working tree state.
     scan_tree(&root, &root, &cli, &mut snapshots, &matcher, false);
@@ -23,6 +30,10 @@ fn main() {
         // One more pass: any file that changed since the seeding walk is
         // dirty and gets streamed before exiting.
         scan_tree(&root, &root, &cli, &mut snapshots, &matcher, true);
+        if let Some(head_move) = tracker.check(&root) {
+            presenter::print_head_move(&head_move, cli.no_color);
+        }
+        presenter::print_footer(&root, tracker.branch(), cli.no_color);
         return;
     }
 
@@ -32,8 +43,10 @@ fn main() {
         cli.pace,
         cli.debounce
     );
+    // The footer states where the watch is and which branch is under HEAD.
+    presenter::print_footer(&root, tracker.branch(), cli.no_color);
 
-    watcher::run_watcher(root, cli, snapshots, matcher);
+    watcher::run_watcher(root, cli, snapshots, matcher, tracker);
 }
 
 /// Recursively walks `dir`, skipping ignored and non-UTF-8 files. When

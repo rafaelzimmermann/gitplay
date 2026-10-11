@@ -10,6 +10,9 @@ including changes made by an AI coding agent, without repeatedly running
 ## Features
 
 - Streams additions, deletions, and context as files change.
+- Reports commits as they happen: hash, branch, subject, and body.
+- Keeps a status footer under the stream showing the repository path and
+  current branch.
 - Shows either each change since the last update or changes since startup.
 - Respects repository `.gitignore` rules and `.git/info/exclude`.
 - Skips hidden files, Git internals, editor temporary files, and files that
@@ -57,6 +60,21 @@ gitplay
 gitplay ~/code/my-project
 ```
 
+A session looks like this (file edits stream as diffs, commits are reported
+with their messages, and a footer repeats the path and branch):
+
+```text
+[14:03:11] ~/code/my-project/src/main.rs (+12, -3)
+@@ -18,7 +18,7 @@
+     let parser = Parser::new(input);
+-    let items = parser.parse_all()?;
++    let items = parser.parse(strict)?;
+[14:03:40] commit 9f2c1ab (main) "fix off-by-one in parser"
+  Commit bodies are printed indented under the subject.
+───────────────────────────────────────────────────────────────────────────────
+~/code/my-project (main)
+```
+
 ### Options
 
 | Option | Default | Description |
@@ -80,6 +98,13 @@ recorded if the repository contains sensitive code or data.
 
 The cumulative view uses the working tree snapshot captured at startup as its
 baseline. It does not compare against Git `HEAD`.
+
+Commit reporting watches the `HEAD` file in the git directory and runs
+`git log` locally when it moves; a single HEAD move prints at most 20 commits
+(older ones are summarized), so rebases and branch switches stay readable.
+Checkouts and detachments get a one-line note (`switched to branch …`,
+`detached HEAD at …`), while resets on the same branch stay silent. Linked
+worktrees and packed refs are resolved without spawning `git`.
 
 ## Contributing
 

@@ -103,7 +103,10 @@ OPTIONS:
    - `last_snapshot`: file state at tick Tn-1 (for delta calculation).
    - `head_snapshot`: file state at git `HEAD` (for cumulative calculation).
    - Produces formatted `DiffHunk` structures with line numbers and token spans.
-5. **`presenter`**:
+5. **`commits`**: HEAD tracking. Reads `HEAD` (and the ref it points at) from
+   the git directory after every debounced event batch, detects when it moves,
+   and lists the new commits (capped at 20) via `git log`, oldest first.
+6. **`presenter`**:
    - `stream`: Terminal streaming engine using `crossterm`. Formats banners, stats, and colorized diff lines. Implements smooth pacing timer.
    - `stats`: Live counter of files touched, lines added (`+`), and lines removed (`-`).
 
@@ -136,6 +139,9 @@ OPTIONS:
 - [x] Zero-latency deterministic unit tests passing in `< 0.05s`.
 - [ ] Relative repo-root path formatting in output banners.
 - [ ] Git HEAD baseline tracking for `--cumulative` and `--once` modes.
+- [x] Commit reporting: HEAD-move detection (worktrees and packed refs
+      included), `git log` message listing, checkout/detach notes, footer with
+      repository path and current branch.
 - [x] Automated installation script (`install.sh`) supporting local build and PATH detection.
 - [ ] Shell completion and PATH discovery verification.
 
