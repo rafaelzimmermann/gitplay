@@ -41,10 +41,11 @@ OPTIONS:
 ENVIRONMENT:
     INSTALL_DIR=<PATH>    Default install directory (overridden by --dir).
                           When neither is set, the script auto-detects:
-                            1. $HOME/.cargo/bin  (if on PATH)
-                            2. $HOME/.local/bin  (if on PATH)
-                            3. /usr/local/bin    (if root or writable)
-                            4. $HOME/.local/bin  (fallback, with PATH advice)
+                            1. The directory of an existing gitplay on PATH
+                            2. $HOME/.cargo/bin  (if on PATH)
+                            3. $HOME/.local/bin  (if on PATH)
+                            4. /usr/local/bin    (if root or writable)
+                            5. $HOME/.local/bin  (fallback, with PATH advice)
 
 EXAMPLES:
     ./install.sh
@@ -97,6 +98,16 @@ resolve_install_dir() {
   fi
   if [[ -n "${INSTALL_DIR:-}" ]]; then
     printf '%s' "$INSTALL_DIR"
+    return
+  fi
+
+  # An existing gitplay on PATH wins: updating in place avoids two installs
+  # where the old one still shadows the new one (e.g. ~/.local/bin/gitplay
+  # resolved before ~/.cargo/bin/gitplay).
+  if command -v "$GITPLAY_NAME" >/dev/null 2>&1; then
+    local resolved
+    resolved="$(command -v "$GITPLAY_NAME")"
+    printf '%s' "$(dirname "$resolved")"
     return
   fi
 
