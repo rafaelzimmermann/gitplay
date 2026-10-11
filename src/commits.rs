@@ -1,5 +1,6 @@
 use crate::repo::head_state;
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process::Command;
 
 /// Upper bound on how many commits a single HEAD move may print. A rebase or
@@ -138,6 +139,60 @@ fn run_log(root: &Path, rev: String) -> Option<String> {
     run_git(root, args)
 }
 
+/// Returns the content of `rel_path` as committed in `HEAD` (`git show
+/// HEAD:<path>`), or `None` when the file is untracked, binary, or git
+/// cannot serve it.
+pub fn head_file(root: &Path, rel_path: &str) -> Option<String> {
+    run_git(root, vec!["show".to_string(), format!("HEAD:{rel_path}")])
+}
+
+/// The cumulative baseline: each file's committed content, fetched with one
+/// `git show` on the file's first diff and cached until HEAD moves, so idle
+/// watching never spawns a subprocess.
+#[derive(Debug, Default)]
+pub struct HeadBaseline {
+    root: PathBuf,
+    cache: HashMap<PathBuf, Option<String>>,
+}
+
+impl HeadBaseline {
+    pub fn new(root: &Path) -> Self {
+        Self {
+            root: root.to_path_buf(),
+            cache: HashMap::new(),
+        }
+    }
+
+    /// Baseline content for `path`: `None` means git `HEAD` has no usable
+    /// copy of the file (untracked or binary), and callers fall back to the
+    /// working-tree snapshot captured at startup.
+    pub fn content(&mut self, path: &Path) -> Option<String> {
+        if let Some(hit) = self.cache.get(path) {
+            return hit.clone();
+        }
+        let fetched = rel_spec(&self.root, path).and_then(|rel| head_file(&self.root, &rel));
+        self.cache.insert(path.to_path_buf(), fetched.clone());
+        fetched
+    }
+
+    /// Drops every cached entry after a HEAD move so later diffs re-anchor
+    /// on the new commit (or the new branch's tip).
+    pub fn invalidate(&mut self) {
+        self.cache.clear();
+    }
+}
+
+/// A repository-relative path spelled the way git expects it
+/// (`src/app.rs`), or `None` when `path` is the root itself or lies outside
+/// it.
+fn rel_spec(root: &Path, path: &Path) -> Option<String> {
+    let rel = path.strip_prefix(root).ok()?;
+    if rel.as_os_str().is_empty() {
+        return None;
+    }
+    Some(rel.to_string_lossy().replace(MAIN_SEPARATOR, "/"))
+}
+
 /// Tracks the last observed HEAD so every commit, merge, or branch switch
 /// made while watching surfaces exactly once in the stream.
 #[derive(Debug, Default)]
@@ -240,6 +295,77 @@ mod tests {
             Some("feature/x".to_string())
         );
         assert_eq!(branch_label(None), None);
+    }
+
+    #[test]
+    fn rel_spec_spells_paths_the_way_git_does() {
+        let root = Path::new("/repo");
+        assert_eq!(
+            rel_spec(root, &root.join("src/app.rs")).as_deref(),
+            Some("src/app.rs")
+        );
+        // The root itself is not a file path, nor is anything outside it.
+        assert_eq!(rel_spec(root, root), None);
+        assert_eq!(rel_spec(root, Path::new("/elsewhere/a.txt")), None);
+    }
+
+    #[test]
+    fn head_baseline_serves_and_refreshes_committed_content() {
+        if !git_available() {
+            return;
+        }
+        let root =
+            std::env::temp_dir().join(format!("gitplay-test-headbase-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("src/app.rs"), "v1\n").unwrap();
+        run_git(
+            &root,
+            vec!["init".into(), "-q".into(), "-b".into(), "main".into()],
+        );
+        // Identity is supplied inline so the test never depends on the
+        // ambient git config.
+        let commit = |msg: &str| {
+            run_git(
+                &root,
+                vec![
+                    "-c".into(),
+                    "user.name=gitplay".into(),
+                    "-c".into(),
+                    "user.email=gitplay@example.com".into(),
+                    "commit".into(),
+                    "-qm".into(),
+                    msg.to_string(),
+                ],
+            )
+        };
+        run_git(&root, vec!["add".into(), "-A".into()]);
+        commit("init");
+
+        let mut baseline = HeadBaseline::new(&root);
+        assert_eq!(
+            baseline.content(&root.join("src/app.rs")),
+            Some("v1\n".to_string())
+        );
+        // Files git does not track have no HEAD content.
+        std::fs::write(root.join("draft.txt"), "x\n").unwrap();
+        assert_eq!(baseline.content(&root.join("draft.txt")), None);
+
+        // A new commit only becomes the anchor after invalidation.
+        std::fs::write(root.join("src/app.rs"), "v2\n").unwrap();
+        run_git(&root, vec!["add".into(), "-A".into()]);
+        commit("v2");
+        assert_eq!(
+            baseline.content(&root.join("src/app.rs")),
+            Some("v1\n".to_string())
+        );
+        baseline.invalidate();
+        assert_eq!(
+            baseline.content(&root.join("src/app.rs")),
+            Some("v2\n".to_string())
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

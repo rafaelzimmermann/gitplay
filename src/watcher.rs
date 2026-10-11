@@ -1,6 +1,7 @@
 use crate::cli::Cli;
-use crate::commits::CommitTracker;
+use crate::commits::{CommitTracker, HeadBaseline};
 use crate::diff::SnapshotStore;
+use crate::fsutil;
 use crate::presenter;
 use crate::repo::GitignoreMatcher;
 use crossterm::event::{poll, read, Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -143,6 +144,10 @@ pub fn run_watcher(
         return;
     }
 
+    // Cumulative mode anchors on git HEAD: each file's committed content is
+    // fetched lazily on its first diff and dropped whenever HEAD moves.
+    let mut head_baseline = HeadBaseline::new(&root);
+
     // While alive this keeps the terminal in raw mode (TTY only) so the key
     // listener below can see individual keypresses.
     let raw_guard = RawModeGuard::new();
@@ -160,7 +165,14 @@ pub fn run_watcher(
             Ok(Ok(events)) => {
                 let mut printed = false;
                 for event in events {
-                    if handle_event(&root, &event.path, &cli, &mut snapshots, &matcher) {
+                    if handle_event(
+                        &root,
+                        &event.path,
+                        &cli,
+                        &mut snapshots,
+                        &matcher,
+                        &mut head_baseline,
+                    ) {
                         printed = true;
                     }
                 }
@@ -169,6 +181,9 @@ pub fn run_watcher(
                 // (or branch switch) without spending any time idle.
                 if let Some(head_move) = tracker.check(&root) {
                     presenter::print_head_move(&head_move, cli.no_color);
+                    // The cumulative anchor moved with HEAD: drop cached
+                    // baselines so later diffs re-anchor on the new commit.
+                    head_baseline.invalidate();
                     printed = true;
                 }
                 if printed {
@@ -208,6 +223,7 @@ fn handle_event(
     cli: &Cli,
     snapshots: &mut SnapshotStore,
     matcher: &GitignoreMatcher,
+    head_baseline: &mut HeadBaseline,
 ) -> bool {
     let is_dir = path.is_dir();
     if matcher.is_ignored(root, path, is_dir) {
@@ -222,7 +238,7 @@ fn handle_event(
     // A vanished file is treated as emptied; files that exist but cannot be
     // read as UTF-8 (e.g. binaries) are skipped to keep the stream readable.
     let content = if path.exists() {
-        match std::fs::read_to_string(path) {
+        match fsutil::read_to_string(path) {
             Ok(content) => content,
             Err(_) => return false,
         }
@@ -230,7 +246,16 @@ fn handle_event(
         String::new()
     };
 
-    if let Some((stats, hunks)) = snapshots.check_diff(path, &content, cli.context, cli.cumulative)
+    // In cumulative mode the committed content anchors the diff; fetched
+    // from the cache (one `git show` per file) when the file is first seen.
+    let head = if cli.cumulative {
+        head_baseline.content(path)
+    } else {
+        None
+    };
+
+    if let Some((stats, hunks)) =
+        snapshots.check_diff(path, &content, cli.context, cli.cumulative, head.as_deref())
     {
         presenter::print_diff(root, path, &stats, &hunks, cli.pace, cli.no_color);
         true

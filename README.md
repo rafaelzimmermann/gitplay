@@ -13,7 +13,8 @@ including changes made by an AI coding agent, without repeatedly running
 - Reports commits as they happen: hash, branch, subject, and body.
 - Keeps a status footer under the stream showing the repository path and
   current branch.
-- Shows either each change since the last update or changes since startup.
+- Shows either each change since the last update or, with `--cumulative`,
+  the full uncommitted change against git `HEAD`.
 - Respects repository `.gitignore` rules and `.git/info/exclude`.
 - Skips hidden files, Git internals, editor temporary files, and files that
   cannot be read as UTF-8.
@@ -83,9 +84,9 @@ with their messages, and a footer repeats the path and branch):
 | `-p, --pace <MS>` | `15` | Delay between displayed diff lines in a terminal. Set to `0` for no delay. |
 | `-w, --debounce <MS>` | `150` | Time window for grouping filesystem events. |
 | `-U, --context <N>` | `3` | Number of unchanged lines shown around changes. |
-| `-c, --cumulative` | off | Compare each update with the working tree as it was when `gitplay` started. |
+| `-c, --cumulative` | off | Compare each update with its committed content in git `HEAD`, like `git diff`. |
 | `--no-color` | off | Disable ANSI color styling. |
-| `--once` | off | Scan once and exit. This reports changes detected between the initial and follow-up scans. |
+| `--once` | off | Print the current uncommitted diff against git `HEAD` once and exit. |
 
 Run `gitplay --help` for the complete command reference.
 
@@ -96,8 +97,15 @@ Diff contents are written to the terminal; the program does not send them to
 an external service. Avoid running it in a terminal whose output is being
 recorded if the repository contains sensitive code or data.
 
-The cumulative view uses the working tree snapshot captured at startup as its
-baseline. It does not compare against Git `HEAD`.
+The cumulative view (`--cumulative`, and `--once`) anchors each file's diff
+on its committed content in git `HEAD` — the same baseline `git diff` uses —
+and re-anchors automatically after every reported commit or checkout. Files
+that `HEAD` does not track (new or ignored), binary files, and repositories
+without commits fall back to the working-tree snapshot captured at startup.
+Each file's committed content is fetched with one local `git show` on its
+first diff and cached, so idle watching stays free of subprocesses. `gitplay`
+reads files without touching their access times, keeping the watcher from
+re-triggering itself on filesystems where reads emit events (tmpfs).
 
 Commit reporting watches the `HEAD` file in the git directory and runs
 `git log` locally when it moves; a single HEAD move prints at most 20 commits

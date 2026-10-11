@@ -1,3 +1,4 @@
+use crate::fsutil;
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use std::path::{Path, PathBuf};
 
@@ -21,7 +22,7 @@ pub fn git_dir(root: &Path) -> Option<PathBuf> {
     if pointer.is_dir() {
         return Some(pointer);
     }
-    let content = match std::fs::read_to_string(&pointer) {
+    let content = match fsutil::read_to_string(&pointer) {
         Ok(content) => content.trim().to_string(),
         Err(_) => return None,
     };
@@ -59,7 +60,7 @@ pub fn head_state(root: &Path) -> HeadState {
             }
         }
     };
-    let content = match std::fs::read_to_string(gitdir.join("HEAD")) {
+    let content = match fsutil::read_to_string(gitdir.join("HEAD")) {
         Ok(content) => content.trim().to_string(),
         Err(_) => {
             return HeadState {
@@ -86,7 +87,7 @@ pub fn head_state(root: &Path) -> HeadState {
 /// The ref store shared by all worktrees: the directory named by
 /// `commondir`, or the git directory itself in a plain repository.
 fn common_git_dir(gitdir: &Path) -> PathBuf {
-    match std::fs::read_to_string(gitdir.join("commondir")) {
+    match fsutil::read_to_string(gitdir.join("commondir")) {
         Ok(content) => {
             let path = Path::new(content.trim());
             if path.is_absolute() {
@@ -103,14 +104,14 @@ fn common_git_dir(gitdir: &Path) -> PathBuf {
 /// but share branch refs with the main `.git`, and refs may be packed rather
 /// than loose, so three locations are tried in turn.
 fn resolve_ref(gitdir: &Path, ref_name: &str) -> String {
-    if let Ok(oid) = std::fs::read_to_string(gitdir.join(Path::new(ref_name))) {
+    if let Ok(oid) = fsutil::read_to_string(gitdir.join(Path::new(ref_name))) {
         return oid.trim().to_string();
     }
     let common = common_git_dir(gitdir);
-    if let Ok(oid) = std::fs::read_to_string(common.join(Path::new(ref_name))) {
+    if let Ok(oid) = fsutil::read_to_string(common.join(Path::new(ref_name))) {
         return oid.trim().to_string();
     }
-    if let Ok(packed) = std::fs::read_to_string(common.join("packed-refs")) {
+    if let Ok(packed) = fsutil::read_to_string(common.join("packed-refs")) {
         for line in packed.lines() {
             let line = line.trim();
             // `#` starts comments, `^` annotates peeled tags.

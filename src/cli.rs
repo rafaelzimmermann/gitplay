@@ -11,7 +11,7 @@ pub struct Cli {
     #[arg(default_value = ".", help = "Path to repository to watch")]
     pub path: PathBuf,
 
-    #[arg(short, long, help = "Show cumulative diffs against initial baseline")]
+    #[arg(short, long, help = "Show cumulative diffs against git HEAD")]
     pub cumulative: bool,
 
     #[arg(short, long, default_value_t = 15, help = "Rolling line delay in ms")]
@@ -36,6 +36,9 @@ pub struct Cli {
     #[arg(long, help = "Disable ANSI color styling")]
     pub no_color: bool,
 
-    #[arg(long, help = "Scan working tree once, print diffs, and exit")]
+    #[arg(
+        long,
+        help = "Scan once, print the uncommitted diff against git HEAD, and exit"
+    )]
     pub once: bool,
 }

@@ -100,13 +100,20 @@ OPTIONS:
 2. **`repo`**: Git repository discovery, workdir discovery, HEAD commit inspection, `.gitignore` parsing via `ignore` crate.
 3. **`watcher`**: Cross-platform filesystem event monitoring (`notify` + `notify-debouncer-mini`), debounced channel sender, ignore-list filtering.
 4. **`diff`**: In-memory text diffing using the `similar` crate (Myers algorithm). Manages file snapshots:
-   - `last_snapshot`: file state at tick Tn-1 (for delta calculation).
-   - `head_snapshot`: file state at git `HEAD` (for cumulative calculation).
-   - Produces formatted `DiffHunk` structures with line numbers and token spans.
+   - `last`: file state at tick Tn-1 (for delta calculation).
+   - `baseline`: file state at startup (fallback anchor).
+   - When given a git `HEAD` anchor (see `commits`), cumulative diffs compare
+     against the committed content instead; a file's state is streamed at
+     most once until its content changes.
+   - Produces formatted `FormattedHunk` structures with line numbers.
 5. **`commits`**: HEAD tracking. Reads `HEAD` (and the ref it points at) from
    the git directory after every debounced event batch, detects when it moves,
-   and lists the new commits (capped at 20) via `git log`, oldest first.
-6. **`presenter`**:
+   and lists the new commits (capped at 20) via `git log`, oldest first. Also
+   owns the `HeadBaseline` cache: each file's committed content (`git show
+   HEAD:<path>`), fetched once on first diff, invalidated on every HEAD move.
+6. **`fsutil`**: Atime-invisible file reads (`O_NOATIME` on Linux) so the
+   watcher never re-triggers itself on filesystems where reads emit events.
+7. **`presenter`**:
    - `stream`: Terminal streaming engine using `crossterm`. Formats banners, stats, and colorized diff lines. Implements smooth pacing timer.
    - `stats`: Live counter of files touched, lines added (`+`), and lines removed (`-`).
 
@@ -138,7 +145,7 @@ OPTIONS:
 - [x] Strict Clippy audit (`--deny warnings`).
 - [x] Zero-latency deterministic unit tests passing in `< 0.05s`.
 - [x] Relative repo-root path formatting in output banners.
-- [ ] Git HEAD baseline tracking for `--cumulative` and `--once` modes.
+- [x] Git HEAD baseline tracking for `--cumulative` and `--once` modes.
 - [x] Commit reporting: HEAD-move detection (worktrees and packed refs
       included), `git log` message listing, checkout/detach notes, footer with
       repository path and current branch.
