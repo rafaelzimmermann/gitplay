@@ -143,7 +143,9 @@ OPTIONS:
       included), `git log` message listing, checkout/detach notes, footer with
       repository path and current branch.
 - [x] Automated installation script (`install.sh`) supporting local build and PATH detection.
-- [ ] Shell completion and PATH discovery verification.
+- [x] Installer verification: build, PATH-aware `--dir` install, and
+      `--version`/`--once` smoke test against the installed release binary.
+- [ ] Shell completion generation.
 
 ---
 
