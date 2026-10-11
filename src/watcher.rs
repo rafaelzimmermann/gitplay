@@ -232,7 +232,7 @@ fn handle_event(
 
     if let Some((stats, hunks)) = snapshots.check_diff(path, &content, cli.context, cli.cumulative)
     {
-        presenter::print_diff(path, &stats, &hunks, cli.pace, cli.no_color);
+        presenter::print_diff(root, path, &stats, &hunks, cli.pace, cli.no_color);
         true
     } else {
         false

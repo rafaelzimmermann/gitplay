@@ -43,10 +43,21 @@ fn timestamp() -> String {
     )
 }
 
+/// The path as shown in a diff banner: relative to the repository root so
+/// banners stay short (`src/main.rs`); anything outside the root keeps its
+/// full display form.
+fn banner_path(root: &Path, path: &Path) -> String {
+    match path.strip_prefix(root) {
+        Ok(relative) if !relative.as_os_str().is_empty() => relative.display().to_string(),
+        _ => path.display().to_string(),
+    }
+}
+
 /// Prints a file banner followed by colorized hunks. When `pace_ms` is set and
 /// stdout is a terminal, each line is flushed and followed by a small delay so
 /// the diff "rolls" instead of dumping all at once.
 pub fn print_diff(
+    root: &Path,
     path: &Path,
     stats: &DiffStats,
     hunks: &[FormattedHunk],
@@ -64,7 +75,7 @@ pub fn print_diff(
     let banner = format!(
         "{} {} (+{}, -{})",
         timestamp(),
-        path.display(),
+        banner_path(root, path),
         stats.additions,
         stats.deletions
     );
@@ -264,10 +275,23 @@ mod tests {
     }
 
     #[test]
+    fn banner_path_strips_the_repository_root() {
+        let root = Path::new("/home/you/app");
+        assert_eq!(banner_path(root, &root.join("src/main.rs")), "src/main.rs");
+        assert_eq!(banner_path(root, &root.join("README.md")), "README.md");
+        // Paths outside the root keep their full form.
+        assert_eq!(
+            banner_path(root, Path::new("/elsewhere/other.txt")),
+            "/elsewhere/other.txt"
+        );
+    }
+
+    #[test]
     fn print_diff_writes_banner_and_hunk_lines() {
         // stdout is piped during tests, so pacing is disabled and this
         // completes without sleeping.
-        let path = Path::new("src/demo.rs");
+        let root = Path::new("/repo");
+        let path = Path::new("/repo/src/demo.rs");
         let stats = DiffStats {
             additions: 1,
             deletions: 1,
@@ -281,7 +305,7 @@ mod tests {
                 DiffLine::Add("new".into()),
             ],
         }];
-        print_diff(path, &stats, &hunks, 0, true);
+        print_diff(root, path, &stats, &hunks, 0, true);
     }
 
     #[test]

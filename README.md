@@ -64,7 +64,7 @@ A session looks like this (file edits stream as diffs, commits are reported
 with their messages, and a footer repeats the path and branch):
 
 ```text
-[14:03:11] ~/code/my-project/src/main.rs (+12, -3)
+[14:03:11] src/main.rs (+12, -3)
 @@ -18,7 +18,7 @@
      let parser = Parser::new(input);
 -    let items = parser.parse_all()?;

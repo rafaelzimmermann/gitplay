@@ -137,7 +137,7 @@ OPTIONS:
 - [x] Synthetic end-to-end test verifying multi-file write stream.
 - [x] Strict Clippy audit (`--deny warnings`).
 - [x] Zero-latency deterministic unit tests passing in `< 0.05s`.
-- [ ] Relative repo-root path formatting in output banners.
+- [x] Relative repo-root path formatting in output banners.
 - [ ] Git HEAD baseline tracking for `--cumulative` and `--once` modes.
 - [x] Commit reporting: HEAD-move detection (worktrees and packed refs
       included), `git log` message listing, checkout/detach notes, footer with
