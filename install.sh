@@ -186,11 +186,34 @@ command -v cargo >/dev/null 2>&1 || die "cargo not found. Install Rust via rustu
 command -v rustc >/dev/null 2>&1 || die "rustc not found. Install Rust via rustup first:
     $RUSTUP_HINT"
 
+# 'cargo' on a rustup-managed system is a shim that needs a default toolchain
+# to resolve to; command -v above passes even when no toolchain is configured,
+# so verify cargo actually runs before blaming dependencies later.
+if ! cargo --version >/dev/null 2>&1; then
+  die "cargo is present but cannot run (no default rustup toolchain). Run:
+    rustup default stable
+  then re-run this script."
+fi
+
+# Runtime dependency: gitplay shells out to git (git log / git show) at
+# runtime, so refuse to install a binary that would not work here.
+command -v git >/dev/null 2>&1 || die "git not found. gitplay monitors git repositories by invoking 'git'; install git first."
+
+# Build dependencies: fetch crates up front so dependency problems (no
+# network, yanked/renamed crates, lockfile drift) fail with actionable
+# advice instead of a raw cargo error mid-build.
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+info "Fetching dependencies (locked)"
+if ! cargo fetch --locked --manifest-path "$REPO_DIR/Cargo.toml"; then
+  die "could not resolve dependencies. Check network access to crates.io, or vendor them first:
+    cargo vendor vendor/ && echo 'vendor/ = { registry = \"https://github.com/rust-lang/crates.io-index\" }' >> .cargo/config.toml
+  then re-run this script."
+fi
+
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 info "Building gitplay (release, locked) in $REPO_DIR"
 cargo build --release --locked --manifest-path "$REPO_DIR/Cargo.toml"
 

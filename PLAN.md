@@ -170,7 +170,8 @@ A zero-friction, robust POSIX shell installation script (`install.sh` / `scripts
      - Priority 3: `/usr/local/bin` (if running with write permissions or root).
      - Fallback: `~/.local/bin` (with automatic shell profile export advice).
 2. **Build & Install Pipeline**:
-   - Checks for `cargo` and `rustc`. If missing, prompts with the official rustup command.
+   - Checks for `cargo`, `rustc`, and `git` (gitplay shells out to `git log`/`git show` at runtime).
+   - Resolves dependencies up front with `cargo fetch --locked`, failing with vendoring advice when offline or on lockfile drift.
    - Compiles release binary with locked dependencies: `cargo build --release --locked`.
    - Atomically installs the binary with executable permissions (`install -m 755` or `cp` + `chmod +x`).
 3. **Verification**:
